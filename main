@@ -1,0 +1,165 @@
+from tkinter import *
+from tkinter import messagebox
+import matplotlib.pyplot as plt
+import sqlite3
+
+# Establish connection to SQLite database
+conn = sqlite3.connect('electricity_data.db')
+c = conn.cursor()
+
+# Create table to store electricity data if it doesn't exist
+c.execute('''CREATE TABLE IF NOT EXISTS electricity_data
+             (month TEXT PRIMARY KEY, units INTEGER)''')
+
+# Create table to store user data if it doesn't exist
+c.execute('''CREATE TABLE IF NOT EXISTS users
+             (username TEXT PRIMARY KEY, password TEXT)''')
+
+# Function to insert or update electricity usage data
+def calculate_electricity_units(month, units):
+    c.execute('''INSERT OR REPLACE INTO electricity_data (month, units) VALUES (?, ?)''', (month, units))
+    conn.commit()
+
+# Function to generate yearly chart
+def generate_yearly_chart():
+    c.execute('''SELECT * FROM electricity_data''')
+    data = c.fetchall()
+    months = [row[0] for row in data]
+    units = [row[1] for row in data]
+
+    plt.bar(months, units, color='blue')
+    plt.xlabel('Month')
+    plt.ylabel('Electricity Units')
+    plt.title('Electricity Units Used Per Year')
+    plt.xticks(rotation=45, ha='right')
+    plt.tight_layout()
+    plt.show()
+
+# Function to calculate total consumption
+def calculate_total_consumption():
+    c.execute('''SELECT SUM(units) FROM electricity_data''')
+    total_consumption = c.fetchone()[0]
+    total_consumption = total_consumption if total_consumption else 0
+    messagebox.showinfo("Total Consumption", f"Total electricity consumption for the year: {total_consumption} units")
+
+# Function to calculate bill cost in rupees
+def calculate_bill_cost():
+    c.execute('''SELECT SUM(units) FROM electricity_data''')
+    total_consumption = c.fetchone()[0]
+    total_consumption = total_consumption if total_consumption else 0
+    off_peak_consumption = total_consumption * 0.4  # Assuming 40% of consumption is off-peak
+    peak_consumption = total_consumption - off_peak_consumption
+
+    off_peak_cost = off_peak_consumption * tariff_rates['off_peak']
+    peak_cost = peak_consumption * tariff_rates['peak']
+
+    total_cost = off_peak_cost + peak_cost
+    total_cost_in_rupees = total_cost * 75  # Assuming 1 USD = 75 INR
+    messagebox.showinfo("Bill Cost", f"Current bill cost: ₹{total_cost_in_rupees:.2f}")
+
+# Function to sign up a user
+def sign_up():
+    username = username_entry.get()
+    password = password_entry.get()
+
+    if username and password:
+        c.execute('''INSERT INTO users (username, password) VALUES (?, ?)''', (username, password))
+        conn.commit()
+        messagebox.showinfo("Sign-up Successful", "Sign-up successful!")
+        show_frame(login_frame)
+    else:
+        messagebox.showerror("Error", "Please enter a username and password.")
+
+# Function to log in a user
+def log_in():
+    username = login_username_entry.get()
+    password = login_password_entry.get()
+
+    if username and password:
+        c.execute('''SELECT * FROM users WHERE username=? AND password=?''', (username, password))
+        user = c.fetchone()
+        if user:
+            messagebox.showinfo("Login Successful", "Login successful!")
+            show_frame(generate_frame)
+        else:
+            messagebox.showerror("Login Failed", "Invalid username or password.")
+    else:
+        messagebox.showerror("Error", "Please enter a username and password.")
+
+# Function to submit electricity units
+def submit_electricity_units():
+    month_str = month_entry.get()
+    units_str = units_entry.get()
+
+    if month_str and units_str:
+        try:
+            month = month_str
+            units = int(units_str)
+            calculate_electricity_units(month, units)
+            messagebox.showinfo("Success", f"Electricity units for month {month} recorded successfully!")
+        except ValueError:
+            messagebox.showerror("Error", "Please enter a valid integer value for units.")
+    else:
+        messagebox.showerror("Error", "Please enter both month and units.")
+
+# Function to show a frame
+def show_frame(frame):
+    frame.tkraise()
+
+# Main window
+root = Tk()
+root.title("Electricity Usage")
+
+# Center the window
+window_width = 800
+window_height = 600
+screen_width = root.winfo_screenwidth()
+screen_height = root.winfo_screenheight()
+x_coordinate = (screen_width - window_width) // 2
+y_coordinate = (screen_height - window_height) // 2
+root.geometry(f"{window_width}x{window_height}+{x_coordinate}+{y_coordinate}")
+
+# Configure rows and columns to expand
+root.grid_rowconfigure(0, weight=1)
+root.grid_columnconfigure(0, weight=1)
+
+# Login Frame
+login_frame = Frame(root, bg="lightyellow")
+login_frame.grid(row=0, column=0, sticky="nsew")
+
+Label(login_frame, text="Login", bg="lightyellow", font=("Arial", 16, "bold"), justify="center", width=40).grid(row=0, column=0, columnspan=2, padx=10, pady=10)
+Label(login_frame, text="Username:", bg="lightyellow", font=("Arial", 12), justify="right").grid(row=1, column=0, padx=10, pady=5, sticky="e")
+Label(login_frame, text="Password:", bg="lightyellow", font=("Arial", 12), justify="right").grid(row=2, column=0, padx=10, pady=5, sticky="e")
+
+login_username_entry = Entry(login_frame, font=("Arial", 12))
+login_username_entry.grid(row=1, column=1, padx=10, pady=5, sticky="w")
+
+login_password_entry = Entry(login_frame, show="*", font=("Arial", 12))
+login_password_entry.grid(row=2, column=1, padx=10, pady=5, sticky="w")
+
+Button(login_frame, text="Login", command=log_in, font=("Arial", 12)).grid(row=3, column=0, columnspan=2, padx=10, pady=10, sticky="nsew")
+Button(login_frame, text="Sign-up", command=lambda: show_frame(signup_frame), font=("Arial", 12)).grid(row=4, column=0, columnspan=2, padx=10, pady=10, sticky="nsew")
+
+# Sign-up Frame
+signup_frame = Frame(root, bg="lightgreen")
+signup_frame.grid(row=0, column=0, sticky="nsew")
+
+Label(signup_frame, text="Sign-up", bg="lightgreen", font=("Arial", 16, "bold"), justify="center", width=40).grid(row=0, column=0, columnspan=2, padx=10, pady=10)
+Label(signup_frame, text="Username:", bg="lightgreen", font=("Arial", 12), justify="right").grid(row=1, column=0, padx=10, pady=5, sticky="e")
+Label(signup_frame, text="Password:", bg="lightgreen", font=("Arial", 12), justify="right").grid(row=2, column=0, padx=10, pady=5, sticky="e")
+
+username_entry = Entry(signup_frame, font=("Arial", 12))
+username_entry.grid(row=1, column=1, padx=10, pady=5, sticky="w")
+
+password_entry = Entry(signup_frame, show="*", font=("Arial", 12))
+password_entry.grid(row=2, column=1, padx=10, pady=5, sticky="w")
+
+Button(signup_frame, text="Sign-up", command=sign_up, font=("Arial", 12)).grid(row=3, column=0, columnspan=2, padx=10, pady=10, sticky="nsew")
+
+# Initially show the login frame
+show_frame(login_frame)
+
+root.mainloop()
+
+# Close the database connection when the application exits
+conn.close()
